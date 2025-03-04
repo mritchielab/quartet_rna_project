@@ -30,4 +30,4 @@ _Below is an example of how you can set up the Image and run._
    ```
 
 ### Checking results
-The pipeline produces BAM file from 'dorado basecaller', and bed file from modkit.
+The pipeline produces BAM file from **dorado basecaller**, and bed file from **modkit**.
