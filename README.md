@@ -1,5 +1,5 @@
 # quartet_rna_project
-Image for RNA modification of direct RNA-seq data, using dorado and modkit; built using Apptainer
+This is an Image for RNA modification analysis of direct RNA-seq data, using dorado and modkit. It is built using Apptainer and can be run by both Apptainer and Singularity.
 
 ## Getting Started
 
@@ -28,3 +28,6 @@ _Below is an example of how you can set up the Image and run._
     --ref /reference/gencode.v43.transcripts.fa \
     --model-dir /opt/dorado/models
    ```
+
+### Checking results
+The pipeline produces BAM file from 'dorado basecaller', and bed file from modkit.
