@@ -9,6 +9,7 @@ _Below is an example of how you can set up the Image and run._
 
 1. Download the sif file and load apptainer if have
    ```sh
+   wget https://github.com/mritchielab/quartet_rna_project/blob/main/RNA_modification.def
    module load apptainer
    ```
 2. Build Image (def file)
