@@ -1,0 +1,116 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author Yang Xu
+    Version 1.1
+    Description "RNA Modification Analysis Container with Dorado and Modkit"
+
+%environment
+    # 添加 dorado、cargo（modkit 安装）到 PATH
+    export PATH="/opt/dorado/bin:/root/.cargo/bin:$PATH"
+    # 设定默认的 Dorado 模型目录
+    export DORADO_MODELS_DIRECTORY="/opt/dorado/models"
+
+%post
+    set -e
+    echo "Updating apt and installing dependencies..."
+    apt-get update && apt-get install -y wget curl tar build-essential libssl-dev pkg-config bash coreutils
+
+    echo "Installing Dorado..."
+    cd /opt
+    wget https://cdn.oxfordnanoportal.com/software/analysis/dorado-0.9.1-linux-x64.tar.gz
+    tar -xzf dorado-0.9.1-linux-x64.tar.gz
+    mv dorado-0.9.1-linux-x64 dorado
+    rm dorado-0.9.1-linux-x64.tar.gz
+
+    echo "Installing Rust toolchain..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
+    export PATH="/root/.cargo/bin:$PATH"
+    rustup update
+
+    echo "Installing modkit via cargo..."
+    cargo install --git https://github.com/nanoporetech/modkit.git
+
+    echo "Downloading Dorado model..."
+    mkdir -p /opt/dorado/models
+    cd /opt/dorado/models
+    /opt/dorado/bin/dorado download --model rna004_130bps_sup@v5.1.0
+    /opt/dorado/bin/dorado download --model rna004_130bps_sup@v5.1.0_m6A_DRACH@v1
+
+%runscript
+#!/bin/bash
+# usage: run RNA_modification.sif --input <input_dir> --output <output_dir> --ref <reference_fasta> [--model-dir <model_dir>]
+usage() {
+    echo "Usage: $0 --input <input_dir> --output <output_dir> --ref <reference_fasta> [--model-dir <model_dir>]"
+    exit 1
+}
+
+if [ "$#" -lt 6 ]; then
+    usage
+fi
+
+# 解析命令行参数
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --input)
+            INPUT="$2"
+            shift 2
+            ;;
+        --output)
+            OUTPUT="$2"
+            shift 2
+            ;;
+        --ref)
+            REF="$2"
+            shift 2
+            ;;
+        --model-dir)
+            MODEL_DIR="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown parameter: $1"
+            usage
+            ;;
+    esac
+done
+
+# 如果没有指定模型目录，使用默认的 `/opt/dorado/models`
+MODEL_DIR="${MODEL_DIR:-/opt/dorado/models}"
+
+if [ -z "$INPUT" ] || [ -z "$OUTPUT" ] || [ -z "$REF" ]; then
+    usage
+fi
+
+# 处理路径
+INPUT=$(realpath "$INPUT")
+OUTPUT=$(realpath "$OUTPUT")
+REF=$(realpath "$REF")
+MODEL_DIR=$(realpath "$MODEL_DIR")
+
+echo "Running Dorado basecaller with input: $INPUT, output: $OUTPUT, and model directory: $MODEL_DIR"
+echo "Reference: $REF"
+
+# 运行 Dorado basecaller
+/opt/dorado/bin/dorado basecaller sup --models-directory "$MODEL_DIR" --modified-bases m6A_DRACH --reference "$REF" --output-dir "$OUTPUT" "$INPUT"
+if [ $? -ne 0 ]; then
+    echo "Dorado basecalling failed"
+    exit 1
+fi
+
+echo "Dorado basecalling finished."
+
+echo "Running modkit pileup..."
+BAM=$(ls "$OUTPUT"/calls*.bam | head -n 1)
+PILEUP="$OUTPUT/pileup.bed"
+LOG="$OUTPUT/pileup.log"
+
+modkit pileup "$BAM" "$PILEUP" --log-filepath "$LOG"
+if [ $? -ne 0 ]; then
+    echo "modkit pileup failed"
+    exit 1
+fi
+
+echo "modkit pileup finished."
+
